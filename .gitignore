@@ -1,3 +1,5 @@
 Database/.idea/*
 Database/venv/
 *.log
+*.db
+test.py

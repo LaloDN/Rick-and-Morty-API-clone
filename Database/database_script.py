@@ -1,7 +1,12 @@
 import requests
+from datetime import datetime
 from pprint import pprint as pp
 import json
-from typing import List, Dict
+from typing import List
+import sqlite3
+
+con = sqlite3.connect('ram.db')
+cursor = con.cursor()
 
 
 def extract_data() -> List[List]:
@@ -27,11 +32,69 @@ def extract_data() -> List[List]:
     return main_list
 
 
+def create_database():
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS episodes(
+            id INTEGER PRIMARY KEY,
+            name STRING,
+            air_date STRING,
+            episode STRING,
+            url STRING,
+            created DATETIME
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS characters(
+            id INTEGER PRIMARY KEY,
+            name STRING,
+            status STRING,
+            species STRING,
+            type STRING,
+            gender STRING,
+            image STRING,
+            url STRING,
+            created DATETIME,
+            origin_id INTEGER,
+            location_id INTEGER
+        )
+    ''')
+
+
+def insert_episodes(episode_list: List):
+    rows_to_insert = [(episode['id'], episode['name'], episode['air_date'], episode['episode'], episode['url'],
+                       datetime.strptime(episode['created'], '%Y-%m-%dT%H:%M:%S.%fZ')) for episode in episode_list]
+    cursor.executemany('''
+        INSERT INTO episodes (id, name, air_date, episode, url, created)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', rows_to_insert)
+    con.commit()
+
+
+def insert_characters(character_list: List):
+    # In the original format, the origin and the location fields are objects, not a single number, this
+    # comprehension list extracts the id from the url in the original format.
+    character_list = [{**row, 'origin_id': row['origin']['url'].split('/')[-1],
+                       'location_id': row['location']['url'].split('/')[-1]} for row in character_list]
+
+    rows_to_insert = [(character['id'], character['name'], character['status'], character['species'],
+                       character['type'], character['gender'], character['image'], character['url'],
+                       datetime.strptime(character['created'], '%Y-%m-%dT%H:%M:%S.%fZ'),
+                       int(character['origin_id']), int(character['location_id'])) for character in character_list]
+    cursor.executemany('''
+        INSERT INTO characters (id, name, status, species, type, gender,
+        image, url, created, origin_id, location_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', rows_to_insert)
+    con.commit()
 
 
 def main():
     character_list, location_list, episode_list = extract_data()
-    print(len(episode_list))
+
+    create_database()
+    # insert_episodes(episode_list)
+    insert_characters(character_list)
+
 
 if __name__ == '__main__':
     main()
