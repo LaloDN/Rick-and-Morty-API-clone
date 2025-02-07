@@ -60,10 +60,30 @@ def create_database():
         )
     ''')
 
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS locations(
+            id INTEGER PRIMARY KEY,
+            name STRING,
+            type STRING,
+            dimension STRING,
+            url STRING,
+            created DATETIME
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS episodes_characters(
+            id INTEGER PRIMARY KEY,
+            episode_id INTEGER,
+            character_id INTEGER
+        )
+    ''')
+
 
 def insert_episodes(episode_list: List):
     rows_to_insert = [(episode['id'], episode['name'], episode['air_date'], episode['episode'], episode['url'],
-                       datetime.strptime(episode['created'], '%Y-%m-%dT%H:%M:%S.%fZ')) for episode in episode_list]
+                       datetime.strptime(episode['created'], '%Y-%m-%dT%H:%M:%S.%fZ'))
+                      for episode in episode_list]
     cursor.executemany('''
         INSERT INTO episodes (id, name, air_date, episode, url, created)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -76,6 +96,9 @@ def insert_characters(character_list: List):
     # comprehension list extracts the id from the url in the original format.
     character_list = [{**row, 'origin_id': row['origin']['url'].split('/')[-1],
                        'location_id': row['location']['url'].split('/')[-1]} for row in character_list]
+    for character in character_list:
+        character['origin_id'] = int(character['origin_id']) if character['origin_id'] else 0
+        character['location_id'] = int(character['location_id']) if character['location_id'] else 0
 
     rows_to_insert = [(character['id'], character['name'], character['status'], character['species'],
                        character['type'], character['gender'], character['image'], character['url'],
@@ -88,12 +111,42 @@ def insert_characters(character_list: List):
     con.commit()
 
 
+def insert_locations(location_list: List):
+    rows_to_insert = [(location['id'], location['name'], location['type'], location['dimension'],
+                       location['url'], datetime.strptime(location['created'], '%Y-%m-%dT%H:%M:%S.%fZ'))
+                      for location in location_list]
+    cursor.executemany('''
+        INSERT INTO locations (id, name, type, dimension, url, created)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', rows_to_insert)
+    con.commit()
+
+
+def episode_characters_table(episode_list: List):
+    """Creates the table episode_characters in the database"""
+    rows_to_insert = []
+    for episode in episode_list:
+        characters_ids = [character.split('/')[-1] for character in episode['characters']]
+        episode_character_ids = [(episode['id'], int(character_id)) for character_id in characters_ids]
+        rows_to_insert.extend(episode_character_ids)
+
+    cursor.executemany('''
+       INSERT INTO episodes_characters (episode_id, character_id)
+        VALUES (?, ?)
+    ''', rows_to_insert)
+
+    con.commit()
+
+
 def main():
     character_list, location_list, episode_list = extract_data()
 
     create_database()
     # insert_episodes(episode_list)
-    insert_characters(character_list)
+    # insert_characters(character_list)
+    # insert_locations(location_list)
+    episode_characters_table(episode_list)
+    con.close()
 
 
 if __name__ == '__main__':
