@@ -1,9 +1,11 @@
 import requests
 from datetime import datetime
 from pprint import pprint as pp
+import logging
 import json
 from typing import List
 import sqlite3
+from utils import logger
 
 con = sqlite3.connect('ram.db')
 cursor = con.cursor()
@@ -32,6 +34,7 @@ def extract_data() -> List[List]:
     return main_list
 
 
+@logger
 def create_database():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS episodes(
@@ -145,9 +148,14 @@ def main():
     # insert_episodes(episode_list)
     # insert_characters(character_list)
     # insert_locations(location_list)
-    episode_characters_table(episode_list)
+    # episode_characters_table(episode_list)
     con.close()
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
+    except Exception:
+        pass

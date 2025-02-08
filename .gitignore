@@ -3,3 +3,4 @@ Database/venv/
 *.log
 *.db
 test.py
+*.pyc
