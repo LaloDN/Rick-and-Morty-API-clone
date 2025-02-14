@@ -7,6 +7,7 @@ import os
 import json
 from typing import List
 from utils import logger
+from pprint import pprint as pp
 
 load_dotenv()
 
@@ -46,8 +47,8 @@ def create_tables(connection: Connection):
         CREATE TABLE IF NOT EXISTS locations(
             id INT NOT NULL,
             name VARCHAR(50) NOT NULL,
-            type VARCHAR(30),
-            dimension VARCHAR(30),
+            type VARCHAR(50),
+            dimension VARCHAR(50),
             url VARCHAR(50) NOT NULL,
             created DATETIME NOT NULL,
             PRIMARY KEY (id)
@@ -60,10 +61,10 @@ def create_tables(connection: Connection):
             name VARCHAR(60) NOT NULL,
             status VARCHAR(15) NOT NULL,
             species VARCHAR(30) NOT NULL,
-            type VARCHAR(20),
+            type VARCHAR(50),
             gender VARCHAR(15) NOT NULL,
-            image VARCHAR(50) NOT NULL,
-            url VARCHAR(50) NOT NULL,
+            image VARCHAR(70) NOT NULL,
+            url VARCHAR(70) NOT NULL,
             created DATETIME NOT NULL,
             origin_id INT,
             location_id INT,
@@ -75,14 +76,15 @@ def create_tables(connection: Connection):
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS episodes_characters(
-            id INT NOT NULL,
+            id INT AUTO_INCREMENT NOT NULL,
             episode_id INT NOT NULL,
             character_id INT NOT NULL,
+            PRIMARY KEY (id),
             FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE,
             FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
         )
     """
-    )
+                   )
 
 
 def extract_data() -> List[List]:
@@ -108,20 +110,63 @@ def extract_data() -> List[List]:
     return main_list
 
 
-def insert_episodes(episode_list: List):
-    pass
+def insert_episodes(episode_list: List, con: Connection):
+    rows_to_insert = [(episode['id'], episode['name'], episode['air_date'],
+                       episode['episode'], episode['url'],
+                       datetime.strptime(episode['created'], '%Y-%m-%dT%H:%M:%S.%fZ'))
+                      for episode in episode_list]
+    cursor = con.cursor()
+    cursor.executemany("""
+        INSERT INTO episodes (id, name, air_date, episode, url, created)
+        VALUES (?,?,?,?,?,?)
+    """, rows_to_insert)
+    con.commit()
 
 
-def insert_characters(character_list: List):
-    pass
+def insert_locations(location_list: List, con: Connection):
+    rows_to_insert = [(location['id'], location['name'], location['type'],
+                       None if location['dimension'] == '' else location['dimension'], location['url'],
+                       datetime.strptime(location['created'], '%Y-%m-%dT%H:%M:%S.%fZ'))
+                      for location in location_list]
+    cursor = con.cursor()
+    cursor.executemany("""
+        INSERT INTO locations (id, name, type, dimension, url, created)
+        VALUES (?,?,?,?,?,?)
+    """, rows_to_insert)
+    con.commit()
 
 
-def insert_locations(location_list: List):
-    pass
+def insert_characters(character_list: List, con: Connection):
+    rows_to_insert = [(character['id'], character['name'], character['status'],
+                       character['species'], None if character['type'] == '' else character['type'],
+                       character['gender'], character['image'], character['url'],
+                       datetime.strptime(character['created'], '%Y-%m-%dT%H:%M:%S.%fZ'),
+                       None if character['location']['url'] == '' else int(character['location']['url'].split('/')[-1]),
+                       None if character['origin']['url'] == '' else int(character['origin']['url'].split('/')[-1])
+                       ) for character in character_list]
+
+    cursor = con.cursor()
+    cursor.executemany("""
+        INSERT INTO characters (id, name, status, species, type, gender, 
+                                image, url, created, location_id, origin_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+    """, rows_to_insert)
+    con.commit()
 
 
-def episode_characters_table(episode_list: List):
-    pass
+def episode_characters_table(episode_list: List, con: Connection):
+    """Creates the table episode_characters in the database"""
+    cursor = con.cursor()
+    rows_to_insert = []
+    for episode in episode_list:
+        characters_ids = [character.split('/')[-1] for character in episode['characters']]
+        episode_character_ids = [(episode['id'], int(character_id)) for character_id in characters_ids]
+        rows_to_insert.extend(episode_character_ids)
+    cursor.executemany('''
+               INSERT INTO episodes_characters (episode_id, character_id)
+                VALUES (?, ?)
+            ''', rows_to_insert)
+    con.commit()
 
 
 def main():
@@ -135,10 +180,10 @@ def main():
     con = database_connection(db_created=True)
     create_tables(con)
     # Inserting all the data into the tables
-    # insert_episodes(episode_list)
-    # insert_characters(character_list)
-    # insert_locations(location_list)
-    # episode_characters_table(episode_list)
+    insert_episodes(episode_list,con)
+    insert_locations(location_list,con)
+    insert_characters(character_list, con)
+    episode_characters_table(episode_list, con)
     con.close()
 
 
